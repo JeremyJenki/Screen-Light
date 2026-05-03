@@ -4,7 +4,7 @@ Portable screen dimmer for multi-monitor setups.
 Uses DDC/CI to dynamically dim inactive monitors based on cursor position.
 
 ## Usage
-Download *screen-light.exe* from the [releases](https://github.com/JeremyJenki/Screen-Light/releases) page. Screen Light automatically generates an adjacent `config.yaml` on first run.
+Download `screen-light.exe` from the [releases](https://github.com/JeremyJenki/Screen-Light/releases) page. Screen Light automatically generates an adjacent `config.yaml` on first run.
 
 Brightness and delay are both easily changed in the config. The tray menu also includes an option to auto-start with Windows.
 
