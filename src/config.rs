@@ -18,7 +18,7 @@ use windows::core::PCWSTR;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
     /// Seconds of cursor absence before a monitor dims. Set to 0 for instant.
-    pub idle_delay_seconds: u64,
+    pub idle_delay_seconds: f64,
     /// Brightness to restore when a monitor becomes active (0-100).
     pub active_brightness: u32,
     /// Brightness to set when a monitor becomes inactive (0-100).
@@ -30,7 +30,7 @@ pub struct Config {
 impl Default for Config {
     fn default() -> Self {
         Self {
-            idle_delay_seconds: 1,
+            idle_delay_seconds: 1.0,
             active_brightness: 75,
             inactive_brightness: 0,
             hotkey_enabled: true,

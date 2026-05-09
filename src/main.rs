@@ -220,7 +220,7 @@ fn main() -> Result<()> {
             last_active_monitor = active_hmonitor;
         }
 
-        let delay = Duration::from_secs(config.idle_delay_seconds);
+        let delay = Duration::from_secs_f64(config.idle_delay_seconds.max(0.0));
         let now = Instant::now();
 
         for monitor in &monitors {
