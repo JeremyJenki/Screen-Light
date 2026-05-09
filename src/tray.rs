@@ -1,7 +1,8 @@
 use anyhow::{Context, Result};
 use windows::Win32::Foundation::{HWND, LPARAM, POINT, WPARAM};
 use windows::Win32::UI::Shell::{
-    Shell_NotifyIconW, NIF_ICON, NIF_MESSAGE, NIF_TIP, NIM_ADD, NIM_DELETE, NOTIFYICONDATAW,
+    Shell_NotifyIconW, NIF_ICON, NIF_MESSAGE, NIF_TIP, NIM_ADD, NIM_DELETE, NIM_MODIFY,
+    NOTIFYICONDATAW,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
     AppendMenuW, CreatePopupMenu, DestroyMenu, GetCursorPos, PostQuitMessage,
@@ -25,22 +26,81 @@ pub static SPOTLIGHT_ENABLED: AtomicBool = AtomicBool::new(true);
 pub static FORCE_ENABLE_REQUESTED: AtomicBool = AtomicBool::new(false);
 pub static FORCE_DISABLE_REQUESTED: AtomicBool = AtomicBool::new(false);
 
-fn get_icon() -> windows::Win32::UI::WindowsAndMessaging::HICON {
+/// Returns true when Windows is currently in dark mode (light-on-dark UI).
+/// Reads the AppsUseLightTheme registry value; absence means dark mode.
+pub fn is_dark_mode() -> bool {
+    use windows::Win32::System::Registry::{
+        RegOpenKeyExW, RegQueryValueExW, HKEY_CURRENT_USER, KEY_READ, REG_DWORD,
+    };
+    unsafe {
+        let subkey: Vec<u16> = "Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize\0"
+            .encode_utf16()
+            .collect();
+        let value_name: Vec<u16> = "AppsUseLightTheme\0".encode_utf16().collect();
+
+        let mut hkey = windows::Win32::System::Registry::HKEY::default();
+        if RegOpenKeyExW(
+            HKEY_CURRENT_USER,
+            PCWSTR(subkey.as_ptr()),
+            0,
+            KEY_READ,
+            &mut hkey,
+        )
+        .is_err()
+        {
+            // Can't read registry — assume light mode
+            return false;
+        }
+
+        let mut data: u32 = 1; // default: light
+        let mut data_size = std::mem::size_of::<u32>() as u32;
+        let mut reg_type = 0u32;
+        let _ = RegQueryValueExW(
+            hkey,
+            PCWSTR(value_name.as_ptr()),
+            None,
+            Some(&mut reg_type as *mut u32 as *mut _),
+            Some(&mut data as *mut u32 as *mut u8),
+            Some(&mut data_size),
+        );
+        let _ = windows::Win32::System::Registry::RegCloseKey(hkey);
+
+        // AppsUseLightTheme == 0  →  dark mode is active
+        reg_type == REG_DWORD.0 && data == 0
+    }
+}
+
+/// Load the tray icon appropriate for the current system theme.
+/// Resource ID 1 = icon.ico (light mode / exe icon)
+/// Resource ID 2 = icon-dark.ico (dark mode tray icon)
+fn get_tray_icon() -> windows::Win32::UI::WindowsAndMessaging::HICON {
     unsafe {
         use windows::Win32::UI::WindowsAndMessaging::LoadIconW;
         use windows::Win32::System::LibraryLoader::GetModuleHandleW;
-        LoadIconW(
-            GetModuleHandleW(None).unwrap_or_default(),
-            PCWSTR(1 as *const u16),
-        ).unwrap_or_else(|_|
-            LoadIconW(None, IDI_APPLICATION).unwrap_or_default()
-        )
+        let hinstance = GetModuleHandleW(None).unwrap_or_default();
+        let resource_id = if is_dark_mode() { 2u16 } else { 1u16 };
+        LoadIconW(hinstance, PCWSTR(resource_id as *const u16))
+            .unwrap_or_else(|_| LoadIconW(None, IDI_APPLICATION).unwrap_or_default())
+    }
+}
+
+/// Update the tray icon in-place to match the current system theme.
+pub fn update_tray_icon(hwnd: HWND) {
+    unsafe {
+        let icon = get_tray_icon();
+        let mut nid = NOTIFYICONDATAW::default();
+        nid.cbSize = std::mem::size_of::<NOTIFYICONDATAW>() as u32;
+        nid.hWnd = hwnd;
+        nid.uID = 1;
+        nid.uFlags = NIF_ICON;
+        nid.hIcon = icon;
+        let _ = Shell_NotifyIconW(NIM_MODIFY, &nid);
     }
 }
 
 pub fn add_tray_icon(hwnd: HWND) -> Result<()> {
     unsafe {
-        let icon = get_icon();
+        let icon = get_tray_icon();
         let mut nid = NOTIFYICONDATAW::default();
         nid.cbSize = std::mem::size_of::<NOTIFYICONDATAW>() as u32;
         nid.hWnd = hwnd;

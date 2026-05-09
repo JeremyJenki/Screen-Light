@@ -13,7 +13,8 @@ use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, WPARAM};
 use windows::Win32::UI::WindowsAndMessaging::{
     CreateWindowExW, DefWindowProcW, DispatchMessageW, FindWindowW, MSG, PeekMessageW, PM_REMOVE,
     PostQuitMessage, PostMessageW, RegisterClassExW, TranslateMessage,
-    WM_APP, WM_COMMAND, WM_DESTROY, WM_ENDSESSION, WM_HOTKEY, WNDCLASSEXW, WS_EX_TOOLWINDOW, WS_OVERLAPPEDWINDOW,
+    WM_APP, WM_COMMAND, WM_DESTROY, WM_ENDSESSION, WM_HOTKEY, WM_SETTINGCHANGE,
+    WNDCLASSEXW, WS_EX_TOOLWINDOW, WS_OVERLAPPEDWINDOW,
 };
 use windows::Win32::UI::Input::KeyboardAndMouse::{
     HOT_KEY_MODIFIERS, MOD_SHIFT, MOD_WIN, RegisterHotKey, UnregisterHotKey, VK_B,
@@ -26,7 +27,7 @@ use monitors::{enumerate_monitors, get_cursor_monitor_index, set_brightness};
 use tray::{
     FORCE_DISABLE_REQUESTED, FORCE_ENABLE_REQUESTED, RELOAD_REQUESTED,
     TOGGLE_AUTOSTART_REQUESTED, TOGGLE_ENABLED_REQUESTED, WM_TRAY,
-    add_tray_icon, handle_menu_command, handle_tray_message, remove_tray_icon,
+    add_tray_icon, handle_menu_command, handle_tray_message, remove_tray_icon, update_tray_icon,
 };
 
 // IPC messages sent from CLI instances to the running instance
@@ -351,6 +352,22 @@ unsafe extern "system" fn wnd_proc(
             }
             WM_ENDSESSION => {
                 PostQuitMessage(0);
+                LRESULT(0)
+            }
+            WM_SETTINGCHANGE => {
+                // lparam points to the changed setting name; "ImmersiveColorSet"
+                // is the string Windows sends when the light/dark theme changes.
+                let changed_setting = if lparam.0 != 0 {
+                    let ptr = lparam.0 as *const u16;
+                    let mut len = 0usize;
+                    while *ptr.add(len) != 0 { len += 1; }
+                    String::from_utf16_lossy(std::slice::from_raw_parts(ptr, len))
+                } else {
+                    String::new()
+                };
+                if changed_setting == "ImmersiveColorSet" {
+                    update_tray_icon(hwnd);
+                }
                 LRESULT(0)
             }
             WM_DESTROY => {
